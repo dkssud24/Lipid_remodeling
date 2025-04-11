@@ -1,0 +1,52 @@
+library(tidyverse)
+library(broom)
+
+# 데이터 불러오기
+df <- read.csv('3_merge_KBRI.csv')
+
+# Age 숫자 변환 (3개월 -> 1, 6개월 -> 2)
+df <- df %>%
+  mutate(Group_bin = ifelse(Group == "AD", 1, 0),
+         Age2 = ifelse(Age == 3, 1, 2))
+
+# long format
+df_long <- df %>% 
+  pivot_longer(cols = Cer_NSZminus_CH:TGZplus_MeOH, 
+               names_to = "lipid", values_to = "value")
+
+# 그룹별 선형회귀
+result <- df_long %>%
+  group_by(Region, lipid, Group) %>%
+  summarise(model = list(lm(value ~ Age2, data = pick(everything()))), .groups = "drop") %>%
+  mutate(tidy_model = map(model, tidy)) %>%
+  unnest(tidy_model) %>%
+  filter(term == "Age2")
+
+# 선형회귀 결과 저장 (model 컬럼 빼고)
+result %>% 
+  select(-model) %>%
+  write.csv("lm_result_by_Group.csv", row.names=FALSE)
+
+# beta, se wide 형태 + Z-test
+result_wide <- result %>%
+  select(Region, lipid, Group, estimate, std.error) %>%
+  pivot_wider(names_from=Group, values_from=c(estimate, std.error), names_sep="_") %>%
+  mutate(
+    beta_diff = estimate_AD - estimate_WT,
+    z = (estimate_AD - estimate_WT) / sqrt(std.error_AD^2 + std.error_WT^2),
+    p_value = 2 * pnorm(-abs(z))
+  )
+
+write.csv(result_wide, "lm_age_effect_beta_diff_Ztest.csv", row.names=FALSE)
+
+# Volcano plot
+p <- ggplot(result_wide, aes(x=beta_diff, y=-log10(p_value))) +
+  geom_point(size=2, alpha=0.8) +
+  facet_wrap(~Region) +
+  geom_vline(xintercept=0, linetype="dashed") +
+  theme_bw() +
+  theme(text=element_text(size=15)) +
+  labs(x="Age effect difference (AD - WT)", y="-log10(p-value)")
+
+# 고화질 저장
+ggsave("lm_age_effect_beta_diff_volcano.png", p, width=10, height=6, dpi=300)
