@@ -1,0 +1,35 @@
+library(tidyverse)
+
+# 데이터 로드
+df <- read.csv("3_merge_KBRI.csv") 
+
+# Long format
+df_long <- df %>%
+  pivot_longer(cols = Cer_NSZminus_CH:TGZplus_MeOH, names_to = "lipid", values_to = "value")
+
+# AD vs WT 평균 차이 & t-test
+diff_df <- df_long %>%
+  group_by(Region, lipid, Group) %>%
+  summarise(mean_value = mean(value, na.rm=TRUE), .groups = 'drop') %>%
+  pivot_wider(names_from = Group, values_from = mean_value) %>%
+  mutate(diff = AD - WT)
+
+pval_df <- df_long %>%
+  group_by(Region, lipid) %>%
+  summarise(pval = t.test(value ~ Group)$p.value, .groups = 'drop')
+
+# Merge
+plot_df <- diff_df %>%
+  left_join(pval_df, by=c("Region", "lipid")) %>%
+  mutate(logp = -log10(pval),
+         zscore = scale(diff)[,1]) # diff z-score 처리
+
+# Volcano plot
+p <- ggplot(plot_df, aes(x=diff, y=logp, color=Region)) +
+  geom_point(size=3) +
+  geom_vline(xintercept=0, linetype="dashed") +
+  theme_bw() +
+  facet_wrap(~Region) +
+  theme(text=element_text(size=15))
+
+ggsave("0_first_remodeling_volcano.png", p, width=10, height=6) 
