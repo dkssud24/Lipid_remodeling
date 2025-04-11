@@ -1,32 +1,41 @@
-df <- read.csv("3_merge_KBRI.csv")
-head(df)
-names(df)
-library(tidyverse)
+> library(tidyverse) # dplyr, ggplot2, tidyr 등 포함
+── Attaching core tidyverse packages ───────────────────────────────────────────────────────────────────────────────────────── tidyverse 2.0.0 ──
+✔ dplyr     1.1.4     ✔ readr     2.1.5
+✔ forcats   1.0.0     ✔ stringr   1.5.1
+✔ ggplot2   3.5.1     ✔ tibble    3.2.1
+✔ lubridate 1.9.4     ✔ tidyr     1.3.1
+✔ purrr     1.0.4     
+── Conflicts ─────────────────────────────────────────────────────────────────────────────────────────────────────────── tidyverse_conflicts() ──
+✖ dplyr::filter() masks stats::filter()
+✖ dplyr::lag()    masks stats::lag()
+ℹ Use the conflicted package (<http://conflicted.r-lib.org/>) to force all conflicts to become errors
+> df <- read.csv('3_merge_KBRI.csv')
+> library(tidyr)
 
 df_long <- df %>%
-  pivot_longer(cols = contains("Zminus_CH") | contains("Zplus_CHCI3"), 
-               names_to = "lipid", 
-               values_to = "value") %>%
-  mutate(lipid = str_remove(lipid, "Zminus_CH|Zplus_CHCI3")) 
-
-library(broom)
-
-result <- df_long %>%
+  pivot_longer(
+    cols = Cer_NSZminus_CH:TGZplus_MeOH,  # lipid feature 전체 선택
+    names_to = "lipid",  # lipid 이름
+    values_to = "value"  # 값
+  )
+> summary_df <- df_long %>%
+  group_by(Region, lipid, Group) %>%
+  summarise(mean_value = mean(value, na.rm=TRUE), .groups='drop') %>%
+  pivot_wider(names_from=Group, values_from=mean_value) %>%
+  mutate(mean_diff = AD - WT)
+> pval_df <- df_long %>%
   group_by(Region, lipid) %>%
-  summarise(mean_diff = mean(value[Group=="AD"]) - mean(value[Group=="WT"]),
-            t_test = list(t.test(value ~ Group)),
-            .groups = 'drop') %>%
-  mutate(p_value = map_dbl(t_test, ~.x$p.value),
-         neg_log_p = -log10(p_value))
-
-library(ggplot2)
-library(ggplot2)
-
-p <- ggplot(result, aes(x=mean_diff, y=neg_log_p, color=Region)) + 
-  geom_point(size=3) +
-  geom_vline(xintercept=c(-1,1), linetype="dashed") +
-  geom_hline(yintercept=1.3, linetype="dashed") +
+  summarise(p = t.test(value ~ Group)$p.value, .groups='drop')
+> final_df <- summary_df %>%
+  left_join(pval_df, by=c("Region", "lipid")) %>%
+  mutate(neg_log_p = -log10(p),
+         effect_dir = ifelse(mean_diff > 0, "Up in AD", "Down in AD"))
+> write.csv(final_df, "summary_statistic_KBRI_all_features.csv", row.names=FALSE)
+> p <- ggplot(final_df, aes(x=mean_diff, y=neg_log_p, color=effect_dir)) +
+  geom_point() +
+  facet_wrap(~Region) +
   theme_bw() +
-  theme(text = element_text(size=15)) 
+  geom_vline(xintercept=0, linetype="dashed") +
+  theme(text=element_text(size=15))
 
-ggsave("volcano_plot.png", p, width=8, height=6, dpi=300)
+ggsave("volcano_plot.png", p, width=10, height=6, dpi=300)
