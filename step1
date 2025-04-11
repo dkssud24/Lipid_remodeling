@@ -1,35 +1,32 @@
+df <- read.csv("3_merge_KBRI.csv")
+head(df)
+names(df)
 library(tidyverse)
 
-# 데이터 로드
-df <- read.csv("3_merge_KBRI.csv") 
-
-# Long format
 df_long <- df %>%
-  pivot_longer(cols = Cer_NSZminus_CH:TGZplus_MeOH, names_to = "lipid", values_to = "value")
+  pivot_longer(cols = contains("Zminus_CH") | contains("Zplus_CHCI3"), 
+               names_to = "lipid", 
+               values_to = "value") %>%
+  mutate(lipid = str_remove(lipid, "Zminus_CH|Zplus_CHCI3")) 
 
-# AD vs WT 평균 차이 & t-test
-diff_df <- df_long %>%
-  group_by(Region, lipid, Group) %>%
-  summarise(mean_value = mean(value, na.rm=TRUE), .groups = 'drop') %>%
-  pivot_wider(names_from = Group, values_from = mean_value) %>%
-  mutate(diff = AD - WT)
+library(broom)
 
-pval_df <- df_long %>%
+result <- df_long %>%
   group_by(Region, lipid) %>%
-  summarise(pval = t.test(value ~ Group)$p.value, .groups = 'drop')
+  summarise(mean_diff = mean(value[Group=="AD"]) - mean(value[Group=="WT"]),
+            t_test = list(t.test(value ~ Group)),
+            .groups = 'drop') %>%
+  mutate(p_value = map_dbl(t_test, ~.x$p.value),
+         neg_log_p = -log10(p_value))
 
-# Merge
-plot_df <- diff_df %>%
-  left_join(pval_df, by=c("Region", "lipid")) %>%
-  mutate(logp = -log10(pval),
-         zscore = scale(diff)[,1]) # diff z-score 처리
+library(ggplot2)
+library(ggplot2)
 
-# Volcano plot
-p <- ggplot(plot_df, aes(x=diff, y=logp, color=Region)) +
+p <- ggplot(result, aes(x=mean_diff, y=neg_log_p, color=Region)) + 
   geom_point(size=3) +
-  geom_vline(xintercept=0, linetype="dashed") +
+  geom_vline(xintercept=c(-1,1), linetype="dashed") +
+  geom_hline(yintercept=1.3, linetype="dashed") +
   theme_bw() +
-  facet_wrap(~Region) +
-  theme(text=element_text(size=15))
+  theme(text = element_text(size=15)) 
 
-ggsave("0_first_remodeling_volcano.png", p, width=10, height=6) 
+ggsave("volcano_plot.png", p, width=8, height=6, dpi=300)
