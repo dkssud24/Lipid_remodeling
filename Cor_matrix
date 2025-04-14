@@ -1,0 +1,97 @@
+#step1
+library(dplyr)
+
+# 대상 lipid 지정
+lipid_A <- "Cer_NSZminus_CH"
+
+# 데이터 필터링
+wt_3m_ob <- d %>% filter(Group == "WT", Age == 3, Region == "OB")
+
+# lipid feature만 추출
+lipid_cols <- names(wt_3m_ob)[8:ncol(wt_3m_ob)]
+
+# 결과 저장용 빈 df
+result_3m <- data.frame(
+  lipid = lipid_cols,
+  cor = NA,
+  pvalue = NA
+)
+
+# for문으로 cor.test()
+for(i in 1:length(lipid_cols)){
+  tmp <- cor.test(wt_3m_ob[[lipid_A]], wt_3m_ob[[lipid_cols[i]]], method="pearson")
+  
+  result_3m$cor[i] <- tmp$estimate  # correlation r
+  result_3m$pvalue[i] <- tmp$p.value # p-value
+}
+
+# 결과 확인
+print(result_3m)
+
+# 저장
+write.csv(result_3m, "step1_wt_3m_ob_correlation.csv", row.names=FALSE)
+
+#step2
+library(dplyr)
+
+lipid_A <- "Cer_NSZminus_CH"
+
+# 6개월령 WT OB 데이터
+wt_6m_ob <- d %>% filter(Group == "WT", Age == 6, Region == "OB")
+
+# lipid 변수명
+lipid_cols <- names(wt_6m_ob)[8:ncol(wt_6m_ob)]
+
+# 결과 저장할 빈 dataframe
+result_6m <- data.frame(
+  lipid = lipid_cols,
+  cor = NA,
+  pvalue = NA
+)
+
+# cor.test() 수행
+for(i in 1:length(lipid_cols)){
+  tmp <- cor.test(wt_6m_ob[[lipid_A]], wt_6m_ob[[lipid_cols[i]]], method="pearson")
+  
+  result_6m$cor[i] <- tmp$estimate  # correlation r 값
+  result_6m$pvalue[i] <- tmp$p.value # p-value 값
+}
+
+# 결과 확인
+print(result_6m)
+
+# 저장
+write.csv(result_6m, paste0("step2_wt_6m_ob_correlation_", lipid_A, "_.csv"), row.names=FALSE)
+
+#step3
+library(dplyr)
+
+# Step1, Step2 파일 불러오기
+r3 <- read.csv("step1_wt_3m_ob_correlation_Cer_NSZminus_CH_.csv")
+r6 <- read.csv("step2_wt_6m_ob_correlation_Cer_NSZminus_CH_.csv")
+
+# merge
+res <- r3 %>%
+  rename(cor_3m = cor, p_3m = pvalue) %>%
+  left_join(r6 %>% rename(cor_6m = cor, p_6m = pvalue), by="lipid")
+
+# cor 변화량 계산
+res <- res %>%
+  mutate(
+    cor_diff = cor_6m - cor_3m,
+    sig_3m = ifelse(p_3m < 0.05, "S", "NS"),
+    sig_6m = ifelse(p_6m < 0.05, "S", "NS"),
+    group = case_when(
+      sig_3m == "S" & sig_6m == "S" ~ "Both Significant",
+      sig_3m == "NS" & sig_6m == "S" ~ "Gain Significant",
+      sig_3m == "S" & sig_6m == "NS" ~ "Lost Significant",
+      TRUE ~ "Not Significant"
+    )
+  )
+
+# 결과 확인
+head(res)
+
+# 저장
+write.csv(res, "step3_cor_diff_summary_Cer_NSZminus_CH_.csv", row.names=FALSE)
+
