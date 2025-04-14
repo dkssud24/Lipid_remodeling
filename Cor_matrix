@@ -161,3 +161,32 @@ for(region in regions){
   write.csv(result_all, paste0("step1_2_3_", group, "_", age1, "m_vs_", age2, "m_", region, "_correlation_all_pairs.csv"), row.names=FALSE)
 }
 
+
+library(dplyr)
+library(data.table)
+
+regions <- c("CB", "Ctx", "Hip", "OB", "Tha")
+
+for(region in regions){
+
+  wt <- fread(paste0("step1_2_3_WT_3m_vs_6m_", region, "_correlation_all_pairs.csv"))
+  ad <- fread(paste0("step1_2_3_AD_3m_vs_6m_", region, "_correlation_all_pairs.csv"))
+  
+  merged <- merge(wt, ad, by=c("base","target"), suffixes=c("_WT","_AD"))
+  
+  merged <- merged %>% mutate(
+    Compare_Label = case_when(
+      Summary_WT %in% c("Gain Significant", "Both Significant") & Summary_AD == "Not Significant" ~ "WT Gain Only",
+      Summary_WT == "Not Significant" & Summary_AD %in% c("Gain Significant", "Both Significant") ~ "AD Gain Only",
+      Summary_WT %in% c("Gain Significant", "Both Significant") & Summary_AD == "Lost Significant" ~ "Opposite",
+      Summary_WT == "Lost Significant" & Summary_AD %in% c("Gain Significant", "Both Significant") ~ "Opposite",
+      Summary_WT %in% c("Gain Significant", "Both Significant") & Summary_AD %in% c("Gain Significant", "Both Significant") ~ "Both Gain",
+      TRUE ~ "No Meaning"
+    )
+  )
+  
+  fwrite(merged, paste0("step4_WT_vs_AD_", region, "_comparison.csv"))
+  
+  cat("Done:", region, "\n")
+}
+
