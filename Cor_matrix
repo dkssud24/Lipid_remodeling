@@ -5,66 +5,68 @@ library(data.table)
 d <- fread("3_merge_KBRI.csv")
 
 # 변수 설정
-region <- "OB"
 group <- "WT"
 age1 <- 3
 age2 <- 6
 
-# 데이터 필터링
-data_3m <- d %>% filter(Group == group, Age == age1, Region == region)
-data_6m <- d %>% filter(Group == group, Age == age2, Region == region)
-
-n1 <- nrow(data_3m)
-n2 <- nrow(data_6m)
-
 lipid_cols <- names(d)[8:ncol(d)]
+regions <- unique(d$Region)
 
-result_all <- data.frame()
+# Region별로 loop
+for(region in regions){
 
-# Step1 ~ Step3 반복
-for(i in 1:(length(lipid_cols)-1)){
-  for(j in (i+1):length(lipid_cols)){
-    
-    lipid1 <- lipid_cols[i]
-    lipid2 <- lipid_cols[j]
-    
-    # Cor.test
-    cor_3m <- cor.test(data_3m[[lipid1]], data_3m[[lipid2]], method="pearson")
-    cor_6m <- cor.test(data_6m[[lipid1]], data_6m[[lipid2]], method="pearson")
-    
-    # Fisher's z-transform
-    z1 <- 0.5 * log((1 + cor_3m$estimate) / (1 - cor_3m$estimate))
-    z2 <- 0.5 * log((1 + cor_6m$estimate) / (1 - cor_6m$estimate))
-    
-    z_diff <- z1 - z2
-    se_diff <- sqrt(1/(n1-3) + 1/(n2-3))
-    z_p <- 2 * (1 - pnorm(abs(z_diff), mean=0, sd=se_diff))
-    
-    # Summary label 조건 설정
-    p1 <- cor_3m$p.value
-    p2 <- cor_6m$p.value
-    
-    summary <- ifelse(p1 < 0.05 & p2 < 0.05, "Both Significant",
-                ifelse(p1 >= 0.05 & p2 < 0.05, "Gain Significant",
-                ifelse(p1 < 0.05 & p2 >= 0.05, "Lost Significant",
-                "Not Significant")))
-    
-    tmp <- data.frame(
-      base = lipid1,
-      target = lipid2,
-      cor_3m = cor_3m$estimate,
-      p_3m = p1,
-      cor_6m = cor_6m$estimate,
-      p_6m = p2,
-      cor_diff = abs(cor_3m$estimate - cor_6m$estimate),
-      z_diff = z_diff,
-      z_pvalue = z_p,
-      Summary = summary
-    )
-    
-    result_all <- rbind(result_all, tmp)
+  cat("Processing:", region, "\n")
+
+  data_3m <- d %>% filter(Group == group, Age == age1, Region == region)
+  data_6m <- d %>% filter(Group == group, Age == age2, Region == region)
+
+  n1 <- nrow(data_3m)
+  n2 <- nrow(data_6m)
+
+  result_all <- data.frame()
+
+  for(i in 1:(length(lipid_cols)-1)){
+    for(j in (i+1):length(lipid_cols)){
+      
+      lipid1 <- lipid_cols[i]
+      lipid2 <- lipid_cols[j]
+
+      cor_3m <- cor.test(data_3m[[lipid1]], data_3m[[lipid2]], method="pearson")
+      cor_6m <- cor.test(data_6m[[lipid1]], data_6m[[lipid2]], method="pearson")
+
+      z1 <- 0.5 * log((1 + cor_3m$estimate) / (1 - cor_3m$estimate))
+      z2 <- 0.5 * log((1 + cor_6m$estimate) / (1 - cor_6m$estimate))
+
+      z_diff <- z1 - z2
+      se_diff <- sqrt(1/(n1-3) + 1/(n2-3))
+      z_p <- 2 * (1 - pnorm(abs(z_diff), mean=0, sd=se_diff))
+
+      p1 <- cor_3m$p.value
+      p2 <- cor_6m$p.value
+
+      summary <- ifelse(p1 < 0.05 & p2 < 0.05, "Both Significant",
+                 ifelse(p1 >= 0.05 & p2 < 0.05, "Gain Significant",
+                 ifelse(p1 < 0.05 & p2 >= 0.05, "Lost Significant",
+                 "Not Significant")))
+
+      tmp <- data.frame(
+        base = lipid1,
+        target = lipid2,
+        cor_3m = cor_3m$estimate,
+        p_3m = p1,
+        cor_6m = cor_6m$estimate,
+        p_6m = p2,
+        cor_diff = abs(cor_3m$estimate - cor_6m$estimate),
+        z_diff = z_diff,
+        z_pvalue = z_p,
+        Summary = summary
+      )
+
+      result_all <- rbind(result_all, tmp)
+    }
   }
-}
 
-# 결과 저장
-write.csv(result_all, paste0("step1_2_3_", group, "_", age1, "m_vs_", age2, "m_", region, "_correlation_all_pairs.csv"), row.names=FALSE)
+  # 결과 저장
+  write.csv(result_all, paste0("step1_2_3_", group, "_", age1, "m_vs_", age2, "m_", region, "_correlation_all_pairs.csv"), row.names=FALSE)
+
+}
