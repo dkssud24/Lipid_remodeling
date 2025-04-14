@@ -1,4 +1,5 @@
 #step1
+d <- read.csv("3_merge_KBRI.csv")
 library(dplyr)
 
 # 대상 lipid 지정
@@ -33,7 +34,7 @@ write.csv(result_3m, "step1_wt_3m_ob_correlation.csv", row.names=FALSE)
 
 #step2
 library(dplyr)
-
+d <- read.csv("3_merge_KBRI.csv")
 lipid_A <- "Cer_NSZminus_CH"
 
 # 6개월령 WT OB 데이터
@@ -65,7 +66,7 @@ write.csv(result_6m, paste0("step2_wt_6m_ob_correlation_", lipid_A, "_.csv"), ro
 
 #step3
 library(dplyr)
-
+d <- read.csv("3_merge_KBRI.csv")
 # Step1, Step2 파일 불러오기
 r3 <- read.csv("step1_wt_3m_ob_correlation_Cer_NSZminus_CH_.csv")
 r6 <- read.csv("step2_wt_6m_ob_correlation_Cer_NSZminus_CH_.csv")
